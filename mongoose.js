@@ -1,38 +1,61 @@
 import mongoose from "mongoose";
-await mongoose.connect("mongodb://127.0.0.1:27017/Authenticationsystem");
+import express from "express";
 import jwt from "jsonwebtoken";
+import cookieParser from "cookie-parser";
+const app = express();
 //Schema for the database
 const passwordsschema = new mongoose.Schema({
-  username: String,
-  password: String,
-  //This schema is for when we want to use the application
-  // Products:[{
-  //   Producttitle:String,
-  //   Productdescription:String,
-  //   images:Buffer
-  //  }]
+  userName: {
+    type: String,
+    required: true,
+  },
+  FullName: {
+    type: String,
+    required: true,
+  },
+  password: {
+    type: String,
+    required: true,
+  },
+  Products: [
+    {
+      productName: { type: String },
+      productTitle: { type: String },
+      productDescription: { type: String },
+      images: { type: [String] },
+      rating: { type: Number },
+      orders: { type: Number },
+      ProductNumber: { type: Number },
+    },
+  ],
 });
-const SALT = new mongoose.Schema({
-  username: String,
-  salt: String,
-});
+app.use(express.json());
+app.use(cookieParser());
 const passwords = mongoose.model("passwords", passwordsschema);
-const salts = mongoose.model("Salts", SALT);
 //Middleware to check if the user has logged in
 const authenticate = (req, res, next) => {
-  const token = res.getHeaders();
-  if (token) {
+  const cookies = req.cookies.token;
+  if (cookies) {
     try {
-      const decoded = jwt.verify(token.split(" ")[1], secretKey);
+      const decoded = jwt.verify(
+        cookies.toString(),
+        process.env.JWT_SECRET.toString(),
+        (err, decoded) => {
+          if (err) {
+            console.log(err);
+            throw Error("Token expired");
+          }
+        }
+      );
       req.user = decoded;
       next();
-      return;
     } catch (err) {
       console.error(err);
       return res.status(401).json({ message: "Authentication failed" });
     }
   } else {
-    res.send(token);
+    return res.status(401).json({ message: "Authorization required" });
   }
 };
-export { passwords, salts, authenticate };
+
+export { passwords, authenticate };
