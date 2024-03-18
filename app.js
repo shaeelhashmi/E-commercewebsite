@@ -10,11 +10,21 @@ import fileUpload from "express-fileupload";
 import helmet from "helmet";
 import cors from "cors";
 import uploadImage from "./cloudinary.js";
+import { checkPrime } from "crypto";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PORT = 3000 || process.env.PORT;
 const app = express();
 let a = true;
+const options = {
+  httpOnly: true,
+  secure: true,
+  expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+};
+const clearCookie = (res, cookieName) => {
+  res.cookie(cookieName, "", { expires: new Date(0) });
+};
+
 app.use(cookieParser());
 app.use(helmet());
 app.use(cors());
@@ -22,12 +32,14 @@ app.use(express.static(path.join(__dirname, "dist")));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(fileUpload({ useTempFiles: true }));
+
 //Endpoint for adding products
 app.get("/products", (req, res) => {
   res.sendFile(path.join(__dirname, "dist/index.html"));
 });
 //Signup route
 app.get("/register", (req, res) => {
+  res.cookie("check", a, { expires: 0 });
   res.sendFile(path.join(__dirname, "dist/index.html"));
 });
 //Login route
@@ -46,13 +58,13 @@ app.post("/authorization", async (req, res) => {
   try {
     if ((await passwords.findOne({ userName: DATA.userName })) && compare) {
       const token = jwt.sign(
-        { username: DATA.userName },
+        { fullName: DATA.userName },
         process.env.JWT_SECRET,
         {
-          expiresIn: "30m",
+          expiresIn: "7d",
         }
       );
-      res.cookie("token", token, { httpOnly: true, secure: true });
+      res.cookie("token", token, options);
       res.redirect("Authenticator");
     } else {
       res.redirect("/login");
@@ -60,10 +72,6 @@ app.post("/authorization", async (req, res) => {
   } catch (err) {
     res.status(500).send(err);
   }
-});
-//API for checking if the user can login or not
-app.get("/Check", (req, res) => {
-  res.send(a);
 });
 //This endpoint is for saving userdata
 app.post("/storingData", async (req, res) => {
@@ -75,14 +83,22 @@ app.post("/storingData", async (req, res) => {
       a = false;
       res.redirect("/register");
     } else {
-      a = true;
+      clearCookie(res, "check");
       const user = new passwords({
         userName: DATA.userName,
         FullName: DATA.FullName,
         password: hash,
       });
       await user.save();
-      res.send("User registered");
+      const token = jwt.sign(
+        { fullName: DATA.userName },
+        process.env.JWT_SECRET,
+        {
+          expiresIn: "7d",
+        }
+      );
+      res.cookie("token", token, options);
+      res.redirect("Authenticator");
     }
   } catch (error) {
     console.log(error);
@@ -109,14 +125,14 @@ app.post("/StoringProducts", async (req, res) => {
       }
       const { username } = decode;
       const user = await passwords.findOne({ userName: username });
-      const Product_Number = user.products.length + 1;
+      const product_Number = user.products.length + 1;
       if (user) {
         user.products.push({
           productName: product_name,
           productTitle: product_title,
           productDescription: product_description,
           images: image,
-          ProductNumber: Product_Number,
+          ProductNumber: product_Number,
         });
         await user.save();
         res.status(200).send("Product added");
@@ -125,6 +141,9 @@ app.post("/StoringProducts", async (req, res) => {
   } else {
     res.send("Authorization required");
   }
+});
+app.use((req, res, next) => {
+  res.status(404).send("<h1>Page not found</h1>");
 });
 app.listen(PORT, async () => {
   try {
