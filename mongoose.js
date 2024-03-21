@@ -19,12 +19,12 @@ const passwordsschema = new mongoose.Schema({
   },
   Products: [
     {
-      productName: { type: String },
       productTitle: { type: String },
       productDescription: { type: String },
+      productPrice: { type: Number },
       images: { type: [String] },
       rating: { type: Number },
-      orders: { type: Number },
+      totalCustomersRated: { type: Number },
       ProductNumber: { type: Number },
     },
   ],
@@ -40,17 +40,21 @@ const authenticate = (req, res, next) => {
       const decoded = jwt.verify(
         cookies.toString(),
         process.env.JWT_SECRET.toString(),
-        (err, decoded) => {
+        async (err, decoded) => {
           if (err) {
             console.log(err);
             throw Error("Token expired");
           }
+          const { fullName } = decoded;
+          const data = await passwords.findOne({ userName: fullName });
+          if (data) {
+            next();
+          } else {
+            res.status(401).json({ message: "Authorization required" });
+          }
         }
       );
-      req.user = decoded;
-      next();
     } catch (err) {
-      console.error(err);
       return res.status(401).json({ message: "Authentication failed" });
     }
   } else {

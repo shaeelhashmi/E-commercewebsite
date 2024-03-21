@@ -6,11 +6,11 @@ import bcrypt from "bcryptjs";
 import { fileURLToPath } from "url";
 import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
-import fileUpload from "express-fileupload";
 import helmet from "helmet";
 import cors from "cors";
 import uploadImage from "./cloudinary.js";
-import { checkPrime } from "crypto";
+import multer from "multer";
+const upload = multer({ dest: "uploads/" });
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PORT = 3000 || process.env.PORT;
@@ -31,7 +31,6 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, "dist")));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(fileUpload({ useTempFiles: true }));
 
 //Endpoint for adding products
 app.get("/products", (req, res) => {
@@ -106,40 +105,61 @@ app.post("/storingData", async (req, res) => {
   }
 });
 //Storing products data
-app.post("/StoringProducts", async (req, res) => {
-  const DATA = req.body;
-  console.log(req.files);
-  res.send(req.files);
-  const image = await uploadImage(DATA.product_images.tempFilePath);
-  res.send(DATA.product_images);
+app.post("/storingProducts", upload.array("productImage"), async (req, res) => {
+  const result = [];
+  const Files = [];
+  Files.push(req.files.map((file) => file.path));
+  for (let i = 0; i < Files[0].length; i++) {
+    result.push(await uploadImage(Files[0][i]));
+  }
+  const url = [];
+  for (let i = 0; i < result.length; i++) {
+    url.push(result[i].url);
+  }
+  const price = parseFloat(req.body.productPrice);
   const cookies = req.cookies.token;
+
   if (cookies) {
-    const product_name = DATA.product_name;
-    const product_title = DATA.product_title;
-    const product_description = DATA.product_description;
-    const image = DATA.images;
-    jwt.verify(cookies, process.env.JWT_SECRET, async (err, decode) => {
-      if (err) {
-        res.status(500).send("Internal server error");
-        return;
-      }
-      const { username } = decode;
-      const user = await passwords.findOne({ userName: username });
-      const product_Number = user.products.length + 1;
-      if (user) {
-        user.products.push({
-          productName: product_name,
-          productTitle: product_title,
-          productDescription: product_description,
-          images: image,
-          ProductNumber: product_Number,
-        });
-        await user.save();
-        res.status(200).send("Product added");
-      }
-    });
+    try {
+      jwt.verify(
+        cookies.toString(),
+        process.env.JWT_SECRET.toString(),
+        async (err, decoded) => {
+          if (err) {
+            throw Error("User not logged in");
+          }
+          const { fullName } = decoded;
+          const data = await passwords.findOne({ userName: fullName });
+          if (data) {
+            try {
+              await passwords.updateOne(
+                { userName: fullName },
+                {
+                  $push: {
+                    Products: {
+                      productTitle: req.body.productTitle,
+                      productDescription: req.body.productDescription,
+                      productPrice: price,
+                      images: url,
+                      ProductNumber: data.Products.length + 1,
+                    },
+                  },
+                }
+              );
+            } catch (err) {
+              res.status(500).send(err);
+            }
+            res.status(200).send("Product added successfully");
+          } else {
+            return res.status(401).json({ message: "Authorization required" });
+          }
+        }
+      );
+    } catch (err) {
+      return res.status(401).json({ message: err });
+    }
   } else {
-    res.send("Authorization required");
+    return res.status(401).json({ message: "Authorization required" });
   }
 });
 app.use((req, res, next) => {
@@ -148,8 +168,7 @@ app.use((req, res, next) => {
 app.listen(PORT, async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
-
-    console.log(`The application is running at ${PORT}`);
+    console.log(`The application is running at PORT ${PORT}`);
   } catch {
     process.exit(1);
   }
