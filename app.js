@@ -1,7 +1,12 @@
 import express from "express";
 import mongoose from "mongoose";
 import path from "path";
-import { passwords, authenticate, checklogin } from "./mongoose.js";
+import {
+  passwords,
+  authenticate,
+  checklogin,
+  authenticateAPI,
+} from "./mongoose.js";
 import bcrypt from "bcryptjs";
 import { fileURLToPath } from "url";
 import jwt from "jsonwebtoken";
@@ -29,6 +34,11 @@ app.use(express.static(path.join(__dirname, "dist")));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+//Api for getting products
+app.get("/getProducts", authenticateAPI, async (req, res) => {
+  const data = await passwords.find();
+  res.send(data.map((item) => item.Products).flat());
+});
 //Endpoint for adding products
 app.get("/products", (req, res) => {
   res.sendFile(path.join(__dirname, "dist/index.html"));

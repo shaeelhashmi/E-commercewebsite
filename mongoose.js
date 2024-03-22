@@ -90,5 +90,16 @@ const checklogin = (req, res, next) => {
     next();
   }
 };
+const authenticateAPI = (req, res, next) => {
+  console.log(req.headers);
+  const header = req.headers["authorization"];
+  console.log(process.env.access_token);
 
-export { passwords, authenticate, checklogin };
+  if (header === `Bearer ${process.env.access_token}`) {
+    next();
+  } else {
+    return res.status(401).send("<h1>Page not found</h1>");
+  }
+};
+
+export { passwords, authenticate, checklogin, authenticateAPI };
