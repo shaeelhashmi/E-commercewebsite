@@ -1,7 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import path from "path";
-import { passwords, authenticate } from "./mongoose.js";
+import { passwords, authenticate, checklogin } from "./mongoose.js";
 import bcrypt from "bcryptjs";
 import { fileURLToPath } from "url";
 import jwt from "jsonwebtoken";
@@ -21,9 +21,6 @@ const options = {
   secure: true,
   expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
 };
-const clearCookie = (res, cookieName) => {
-  res.cookie(cookieName, "", { expires: new Date(0) });
-};
 
 app.use(cookieParser());
 app.use(helmet());
@@ -37,12 +34,11 @@ app.get("/products", (req, res) => {
   res.sendFile(path.join(__dirname, "dist/index.html"));
 });
 //Signup route
-app.get("/register", (req, res) => {
-  res.cookie("check", a, { expires: 0 });
+app.get("/register", checklogin, (req, res) => {
   res.sendFile(path.join(__dirname, "dist/index.html"));
 });
 //Login route
-app.get("/login", (req, res) => {
+app.get("/login", checklogin, (req, res) => {
   res.sendFile(path.join(__dirname, "dist/index.html"));
 });
 //Route if user has logged in
@@ -52,10 +48,15 @@ app.get("/authenticator", authenticate, (req, res) => {
 //Endpoint for authorizing user and setting cookies
 app.post("/authorization", async (req, res) => {
   const DATA = req.body;
-  const data2 = await passwords.findOne({ userName: DATA.userName });
-  const compare = await bcrypt.compare(DATA.Password, data2.password);
+
   try {
-    if ((await passwords.findOne({ userName: DATA.userName })) && compare) {
+    if (await passwords.findOne({ userName: DATA.userName })) {
+      const data2 = await passwords.findOne({ userName: DATA.userName });
+      const compare = await bcrypt.compare(DATA.Password, data2.password);
+      if (!compare) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
       const token = jwt.sign(
         { fullName: DATA.userName },
         process.env.JWT_SECRET,
@@ -79,10 +80,8 @@ app.post("/storingData", async (req, res) => {
   const hash = await bcrypt.hash(DATA.password, salt);
   try {
     if (await passwords.findOne({ userName: DATA.userName })) {
-      a = false;
-      res.redirect("/register");
+      return res.status(401).json({ message: "Username already exists" });
     } else {
-      clearCookie(res, "check");
       const user = new passwords({
         userName: DATA.userName,
         FullName: DATA.FullName,
@@ -97,11 +96,10 @@ app.post("/storingData", async (req, res) => {
         }
       );
       res.cookie("token", token, options);
-      res.redirect("Authenticator");
+      return res.status(200).json({ message: "User registered successfully" });
     }
   } catch (error) {
-    console.log(error);
-    res.status(500).send("Internal Server error");
+    return res.status(error.statusCode).json({ message: error.message });
   }
 });
 //Storing products data
@@ -126,7 +124,7 @@ app.post("/storingProducts", upload.array("productImage"), async (req, res) => {
         process.env.JWT_SECRET.toString(),
         async (err, decoded) => {
           if (err) {
-            throw Error("User not logged in");
+            return res.status(401).json({ message: "User not logged in" });
           }
           const { fullName } = decoded;
           const data = await passwords.findOne({ userName: fullName });
@@ -139,17 +137,20 @@ app.post("/storingProducts", upload.array("productImage"), async (req, res) => {
                     Products: {
                       productTitle: req.body.productTitle,
                       productDescription: req.body.productDescription,
+                      productCategory: req.body.productCategory,
                       productPrice: price,
                       images: url,
+                      rating: 5,
+                      totalCustomersRated: 1,
                       ProductNumber: data.Products.length + 1,
                     },
                   },
                 }
               );
             } catch (err) {
-              res.status(500).send(err);
+              return res.status(500).send(err);
             }
-            res.status(200).send("Product added successfully");
+            return res.status(200).send("Product added successfully");
           } else {
             return res.status(401).json({ message: "Authorization required" });
           }

@@ -21,6 +21,7 @@ const passwordsschema = new mongoose.Schema({
     {
       productTitle: { type: String },
       productDescription: { type: String },
+      productCategory: { type: String },
       productPrice: { type: Number },
       images: { type: [String] },
       rating: { type: Number },
@@ -32,7 +33,7 @@ const passwordsschema = new mongoose.Schema({
 app.use(express.json());
 app.use(cookieParser());
 const passwords = mongoose.model("passwords", passwordsschema);
-//Middleware to check if the user has logged in
+//Middle ware to check if the user is authenticated
 const authenticate = (req, res, next) => {
   const cookies = req.cookies.token;
   if (cookies) {
@@ -61,5 +62,33 @@ const authenticate = (req, res, next) => {
     return res.status(401).json({ message: "Authorization required" });
   }
 };
+const checklogin = (req, res, next) => {
+  const cookies = req.cookies.token;
+  if (cookies) {
+    try {
+      const decoded = jwt.verify(
+        cookies.toString(),
+        process.env.JWT_SECRET.toString(),
+        async (err, decoded) => {
+          if (err) {
+            console.log(err);
+            throw Error("Token expired");
+          }
+          const { fullName } = decoded;
+          const data = await passwords.findOne({ userName: fullName });
+          if (data) {
+            res.redirect("/");
+          } else {
+            next();
+          }
+        }
+      );
+    } catch (err) {
+      next();
+    }
+  } else {
+    next();
+  }
+};
 
-export { passwords, authenticate };
+export { passwords, authenticate, checklogin };
