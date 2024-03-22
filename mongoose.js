@@ -91,10 +91,7 @@ const checklogin = (req, res, next) => {
   }
 };
 const authenticateAPI = (req, res, next) => {
-  console.log(req.headers);
   const header = req.headers["authorization"];
-  console.log(process.env.access_token);
-
   if (header === `Bearer ${process.env.access_token}`) {
     next();
   } else {

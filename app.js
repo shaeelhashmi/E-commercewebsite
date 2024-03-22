@@ -37,7 +37,14 @@ app.use(express.urlencoded({ extended: true }));
 //Api for getting products
 app.get("/getProducts", authenticateAPI, async (req, res) => {
   const data = await passwords.find();
-  res.send(data.map((item) => item.Products).flat());
+  res.send(
+    data
+      .map((item) => ({
+        userName: item.userName,
+        products: item.Products,
+      }))
+      .flat()
+  );
 });
 //Endpoint for adding products
 app.get("/products", (req, res) => {
