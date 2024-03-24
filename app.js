@@ -11,8 +11,6 @@ import bcrypt from "bcryptjs";
 import { fileURLToPath } from "url";
 import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
-import helmet from "helmet";
-import cors from "cors";
 import uploadImage from "./cloudinary.js";
 import multer from "multer";
 const upload = multer({ dest: "uploads/" });
@@ -20,7 +18,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PORT = 3000 || process.env.PORT;
 const app = express();
-let a = true;
 const options = {
   httpOnly: true,
   secure: true,
@@ -28,26 +25,51 @@ const options = {
 };
 
 app.use(cookieParser());
-app.use(helmet());
-app.use(cors());
 app.use(express.static(path.join(__dirname, "dist")));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+//Api for getting a specific products
+app.post("/:username/:id", authenticateAPI, async (req, res) => {
+  const { username, id } = req.params;
 
+  try {
+    const user = await passwords.findOne({
+      userName: username,
+    });
+    for (let i = 0; i < user.Products.length; i++) {
+      if (user.Products[i]._id == id) {
+        return res.send(user.Products[i]);
+      }
+    }
+    return res.status(404).json({ message: "Not found" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
 //Api for getting products
 app.get("/getProducts", authenticateAPI, async (req, res) => {
   const data = await passwords.find();
-  res.send(
-    data
-      .map((item) => ({
-        userName: item.userName,
-        products: item.Products,
-      }))
-      .flat()
-  );
+  const user = [];
+  const products = [];
+  for (let i = 0; i < data.length; i++) {
+    for (let j = 0; j < data[i].Products.length; j++) {
+      user.push(data[i].userName);
+      products.push(data[i].Products[j]);
+    }
+  }
+  const DATA = {
+    userName: user,
+    products: products,
+  };
+  res.send(DATA);
+});
+//dynamic route for showing products
+app.get("/:username/:id", (req, res) => {
+  res.sendFile(path.join(__dirname, "dist/index.html"));
 });
 //Endpoint for adding products
-app.get("/products", (req, res) => {
+app.get("/user/products", (req, res) => {
   res.sendFile(path.join(__dirname, "dist/index.html"));
 });
 //Signup route
@@ -65,7 +87,6 @@ app.get("/authenticator", authenticate, (req, res) => {
 //Endpoint for authorizing user and setting cookies
 app.post("/authorization", async (req, res) => {
   const DATA = req.body;
-
   try {
     if (await passwords.findOne({ userName: DATA.userName })) {
       const data2 = await passwords.findOne({ userName: DATA.userName });
@@ -129,7 +150,7 @@ app.post("/storingProducts", upload.array("productImage"), async (req, res) => {
   }
   const url = [];
   for (let i = 0; i < result.length; i++) {
-    url.push(result[i].url);
+    url.push(result[i].secure_url);
   }
   const price = parseFloat(req.body.productPrice);
   const cookies = req.cookies.token;
