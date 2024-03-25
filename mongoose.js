@@ -26,7 +26,7 @@ const passwordsschema = new mongoose.Schema({
       images: { type: [String] },
       rating: { type: Number },
       totalCustomersRated: { type: Number },
-      ProductNumber: { type: Number },
+      savedItems: { type: [String] },
     },
   ],
 });
@@ -90,12 +90,12 @@ const checklogin = (req, res, next) => {
     next();
   }
 };
-const authenticateAPI = (req, res, next) => {
+const authenticateAPI = (token) => (req, res, next) => {
   const header = req.headers["authorization"];
-  if (header === `Bearer ${process.env.access_token}`) {
+  if (header === `Bearer ${token}`) {
     next();
   } else {
-    return res.status(401).send("<h1>Page not found</h1>");
+    return res.status(500).send("Internal server error");
   }
 };
 

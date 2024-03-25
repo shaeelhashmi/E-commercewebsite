@@ -29,57 +29,65 @@ app.use(express.static(path.join(__dirname, "dist")));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 //Api for getting a specific products
-app.post("/:userid/:prodid", authenticateAPI, async (req, res) => {
-  const { userid, prodid } = req.params;
+app.post(
+  "/:userid/:prodid",
+  authenticateAPI(process.env.access_token),
+  async (req, res) => {
+    const { userid, prodid } = req.params;
 
-  try {
-    const user = await passwords.findById(userid);
-    if (user) {
-      for (let i = 0; i < user.Products.length; i++) {
-        if (user.Products[i]._id == prodid) {
-          return res.send(user.Products[i]);
+    try {
+      const user = await passwords.findById(userid);
+      if (user) {
+        for (let i = 0; i < user.Products.length; i++) {
+          if (user.Products[i]._id == prodid) {
+            return res.send(user.Products[i]);
+          }
+        }
+      } else {
+        return res.status(404).json({ message: "Product not found" });
+      }
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Server Error" });
+    }
+  }
+);
+//Api for getting products
+app.get(
+  "/getproducts",
+  authenticateAPI(process.env.access_token),
+  async (req, res) => {
+    try {
+      const data = await passwords.find();
+      const userId = [];
+      const userNames = [];
+      const products = [];
+      const dataArr = [];
+      for (let i = 0; i < data.length; i++) {
+        for (let j = 0; j < data[i].Products.length; j++) {
+          userNames.push(data[i].userName);
+          userId.push(data[i]._id);
+          products.push(data[i].Products[j]);
+          dataArr.push({
+            userId: data[i]._id,
+            products: data[i].Products[j],
+            userName: data[i].userName,
+          });
         }
       }
-    } else {
-      return res.status(404).json({ message: "Product not found" });
+      return res.send(dataArr);
+    } catch (err) {
+      return res.status(500).json({ message: "Internal server Error" });
     }
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: "Server Error" });
   }
-});
-//Api for getting products
-app.get("/getProducts", authenticateAPI, async (req, res) => {
-  try {
-    const data = await passwords.find();
-    const userId = [];
-    const userNames = [];
-    const products = [];
-    const dataArr = [];
-    for (let i = 0; i < data.length; i++) {
-      for (let j = 0; j < data[i].Products.length; j++) {
-        userNames.push(data[i].userName);
-        userId.push(data[i]._id);
-        products.push(data[i].Products[j]);
-        dataArr.push({
-          userId: data[i]._id,
-          products: data[i].Products[j],
-          userName: data[i].userName,
-        });
-      }
-    }
-    return res.send(dataArr);
-  } catch (err) {
-    return res.status(500).json({ message: "Internal server Error" });
-  }
-});
+);
 //dynamic route for showing products
 app.get("/:userid/:prodid", (req, res) => {
   res.sendFile(path.join(__dirname, "dist/index.html"));
 });
 //Endpoint for main page
 //Endpoint for adding products
-app.get("/user/products", (req, res) => {
+app.get("/products", (req, res) => {
   res.sendFile(path.join(__dirname, "dist/index.html"));
 });
 //Signup route
@@ -118,36 +126,42 @@ app.post("/authorization", async (req, res) => {
   }
 });
 //This endpoint is for saving userdata
-app.post("/storingData", async (req, res) => {
-  const DATA = req.body;
-  const salt = await bcrypt.genSalt(10);
-  const hash = await bcrypt.hash(DATA.password, salt);
-  try {
-    if (await passwords.findOne({ userName: DATA.userName })) {
-      return res.status(401).json({ message: "Username already exists" });
-    } else {
-      const user = new passwords({
-        userName: DATA.userName,
-        FullName: DATA.FullName,
-        password: hash,
-      });
-      await user.save();
-      const token = jwt.sign(
-        { fullName: DATA.userName },
-        process.env.JWT_SECRET,
-        {
-          expiresIn: "7d",
-        }
-      );
-      res.cookie("token", token, options);
-      return res.status(200).json({ message: "User registered successfully" });
+app.post(
+  "/storingdata",
+  authenticateAPI(process.env.LOGIN_TOKEN),
+  async (req, res) => {
+    const DATA = req.body;
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(DATA.password, salt);
+    try {
+      if (await passwords.findOne({ userName: DATA.userName })) {
+        return res.status(401).json({ message: "Username already exists" });
+      } else {
+        const user = new passwords({
+          userName: DATA.userName,
+          FullName: DATA.FullName,
+          password: hash,
+        });
+        await user.save();
+        const token = jwt.sign(
+          { fullName: DATA.userName },
+          process.env.JWT_SECRET,
+          {
+            expiresIn: "7d",
+          }
+        );
+        res.cookie("token", token, options);
+        return res
+          .status(200)
+          .json({ message: "User registered successfully" });
+      }
+    } catch (error) {
+      return res.status(error.statusCode).json({ message: error.message });
     }
-  } catch (error) {
-    return res.status(error.statusCode).json({ message: error.message });
   }
-});
+);
 //Storing products data
-app.post("/storingProducts", upload.array("productImage"), async (req, res) => {
+app.post("/storingproducts", upload.array("productImage"), async (req, res) => {
   const result = [];
   const Files = [];
   Files.push(req.files.map((file) => file.path));
@@ -186,7 +200,7 @@ app.post("/storingProducts", upload.array("productImage"), async (req, res) => {
                       images: url,
                       rating: 5,
                       totalCustomersRated: 1,
-                      ProductNumber: data.Products.length + 1,
+                      savedItems: [],
                     },
                   },
                 }
