@@ -29,45 +29,55 @@ app.use(express.static(path.join(__dirname, "dist")));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 //Api for getting a specific products
-app.post("/:username/:id", authenticateAPI, async (req, res) => {
-  const { username, id } = req.params;
+app.post("/:userid/:prodid", authenticateAPI, async (req, res) => {
+  const { userid, prodid } = req.params;
 
   try {
-    const user = await passwords.findOne({
-      userName: username,
-    });
-    for (let i = 0; i < user.Products.length; i++) {
-      if (user.Products[i]._id == id) {
-        return res.send(user.Products[i]);
+    const user = await passwords.findById(userid);
+    if (user) {
+      for (let i = 0; i < user.Products.length; i++) {
+        if (user.Products[i]._id == prodid) {
+          return res.send(user.Products[i]);
+        }
       }
+    } else {
+      return res.status(404).json({ message: "Product not found" });
     }
-    return res.status(404).json({ message: "Not found" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server Error" });
+    return res.status(500).json({ message: "Server Error" });
   }
 });
 //Api for getting products
 app.get("/getProducts", authenticateAPI, async (req, res) => {
-  const data = await passwords.find();
-  const user = [];
-  const products = [];
-  for (let i = 0; i < data.length; i++) {
-    for (let j = 0; j < data[i].Products.length; j++) {
-      user.push(data[i].userName);
-      products.push(data[i].Products[j]);
+  try {
+    const data = await passwords.find();
+    const userId = [];
+    const userNames = [];
+    const products = [];
+    const dataArr = [];
+    for (let i = 0; i < data.length; i++) {
+      for (let j = 0; j < data[i].Products.length; j++) {
+        userNames.push(data[i].userName);
+        userId.push(data[i]._id);
+        products.push(data[i].Products[j]);
+        dataArr.push({
+          userId: data[i]._id,
+          products: data[i].Products[j],
+          userName: data[i].userName,
+        });
+      }
     }
+    return res.send(dataArr);
+  } catch (err) {
+    return res.status(500).json({ message: "Internal server Error" });
   }
-  const DATA = {
-    userName: user,
-    products: products,
-  };
-  res.send(DATA);
 });
 //dynamic route for showing products
-app.get("/:username/:id", (req, res) => {
+app.get("/:userid/:prodid", (req, res) => {
   res.sendFile(path.join(__dirname, "dist/index.html"));
 });
+//Endpoint for main page
 //Endpoint for adding products
 app.get("/user/products", (req, res) => {
   res.sendFile(path.join(__dirname, "dist/index.html"));
@@ -79,10 +89,6 @@ app.get("/register", checklogin, (req, res) => {
 //Login route
 app.get("/login", checklogin, (req, res) => {
   res.sendFile(path.join(__dirname, "dist/index.html"));
-});
-//Route if user has logged in
-app.get("/authenticator", authenticate, (req, res) => {
-  res.send("You are logged in ");
 });
 //Endpoint for authorizing user and setting cookies
 app.post("/authorization", async (req, res) => {
@@ -108,7 +114,7 @@ app.post("/authorization", async (req, res) => {
       res.redirect("/login");
     }
   } catch (err) {
-    res.status(500).send(err);
+    return res.status(500).send(err);
   }
 });
 //This endpoint is for saving userdata
@@ -202,7 +208,7 @@ app.post("/storingProducts", upload.array("productImage"), async (req, res) => {
   }
 });
 app.use((req, res, next) => {
-  res.status(404).send("<h1>Page not found</h1>");
+  res.status(404).send("<h1>404 Page not found</h1>");
 });
 app.listen(PORT, async () => {
   try {
